@@ -62,10 +62,6 @@ local AdminRankSlider = Tabs.Main:AddSlider("AdminRank", {
         local adminRank = player:FindFirstChild("AdminRank")
         if adminRank then
             adminRank.Value = Value
-            Fluent:Notify({
-                Title = "Admin Rank",
-                Content = "Rang défini à " .. Value,
-                Duration = 3
             })
         else
             Fluent:Notify({

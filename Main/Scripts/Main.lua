@@ -76,23 +76,20 @@ local AdminRankSlider = Tabs.Main:AddSlider("AdminRank", {
 Tabs.Main:AddButton({
     Title = "🔥 Admin Max (60)",
     Description = "Définir le rang admin au maximum",
-    Callback = function()
-        local adminRank = player:FindFirstChild("AdminRank")
-        if adminRank then
-            adminRank.Value = 60
-            AdminRankSlider:SetValue(60)
-            Fluent:Notify({
-                Title = "Admin Max",
-                Content = "Rang administrateur défini à 60!",
-                Duration = 3
-            })
-        else
-            Fluent:Notify({
-                Title = "Erreur",
-                Content = "AdminRank non trouvé!",
-                Duration = 3
-            })
-        end
+Callback = function(Value)
+    if refreshing then return end
+    local adminRank = player:FindFirstChild("AdminRank")
+    if adminRank then
+        adminRank.Value = Value
+    else
+        Fluent:Notify({
+            Title = "Erreur",
+            Content = "AdminRank non trouvé!",
+            Duration = 3
+        })
+    end
+end
+
     end
 })
 

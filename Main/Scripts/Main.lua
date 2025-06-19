@@ -9,8 +9,8 @@ local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/d
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "Admin Panel",
-    SubTitle = "Simplifié par Napixx",
+    Title = "School FR RP Script",
+    SubTitle = " Pré-Alpha by Napixx",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,

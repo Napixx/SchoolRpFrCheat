@@ -11,12 +11,12 @@ local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.
 -- Créer la fenêtre principale
 local Window = Fluent:CreateWindow({
     Title = "Admin Panel",
-    SubTitle = "v1.0 - by " .. player.Name,
+    SubTitle = "Alpha 1.0 - by Napixx",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
     Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
+    MinimizeKey = Enum.KeyCode.RightControl
 })
 
 -- Créer les onglets

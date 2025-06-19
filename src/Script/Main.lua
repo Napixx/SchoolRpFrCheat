@@ -156,12 +156,13 @@ local function getColor(plr)
         return Color3.fromRGB(255, 0, 0) -- rouge
     elseif teamChangeId and teamChangeId.Value > 0 then
         return Color3.fromRGB(255, 165, 0) -- orange
-    elseif Grade and typeof(Grade.Value) == "string" and string.find(Grade.Value:lower(), "élève") then
+    elseif Grade and typeof(Grade.Value) == "string" and string.find(Grade.Value, "Élève") then
         return Color3.fromRGB(255, 255, 255) -- blanc
     else
-        return nil -- ou une autre couleur par défaut si tu veux
+        return nil -- ou autre couleur
     end
 end
+
 
 local function createPoint(plr, color)
     local char = plr.Character

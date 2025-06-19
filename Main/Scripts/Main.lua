@@ -31,6 +31,7 @@ local Options = Fluent.Options
 -- Variables globales
 local isEnColleActive = false
 local enColleConnection = nil
+local refreshing = false
 
 -- Notification de chargement
 Fluent:Notify({
@@ -44,7 +45,6 @@ Fluent:Notify({
 -- ONGLET ADMIN
 -- ================================
 
--- Section Admin Rank
 Tabs.Main:AddParagraph({
     Title = "🔑 Administration",
     Content = "Contrôles administrateur avancés\nModifiez vos privilèges en jeu"
@@ -58,6 +58,7 @@ local AdminRankSlider = Tabs.Main:AddSlider("AdminRank", {
     Max = 100,
     Rounding = 1,
     Callback = function(Value)
+        if refreshing then return end
         local adminRank = player:FindFirstChild("AdminRank")
         if adminRank then
             adminRank.Value = Value
@@ -99,7 +100,6 @@ Tabs.Main:AddButton({
     end
 })
 
--- Section Anti-Colle
 Tabs.Main:AddParagraph({
     Title = "🛡️ Protection",
     Content = "Systèmes de protection automatique"
@@ -121,9 +121,8 @@ AntiColleToggle:OnChanged(function()
         })
         return
     end
-    
+
     if Options.AntiColle.Value then
-        -- Activer
         isEnColleActive = true
         enColleConnection = game:GetService("RunService").Heartbeat:Connect(function()
             if enColle then
@@ -136,7 +135,6 @@ AntiColleToggle:OnChanged(function()
             Duration = 3
         })
     else
-        -- Désactiver
         isEnColleActive = false
         if enColleConnection then
             enColleConnection:Disconnect()
@@ -154,7 +152,6 @@ end)
 -- ONGLET JOUEUR
 -- ================================
 
--- Section Statistiques
 Tabs.Player:AddParagraph({
     Title = "📊 Statistiques",
     Content = "Gestion des statistiques du joueur"
@@ -168,6 +165,7 @@ local FoodSlider = Tabs.Player:AddSlider("Food", {
     Max = 100,
     Rounding = 1,
     Callback = function(Value)
+        if refreshing then return end
         local food = player:FindFirstChild("Food")
         if food then
             food.Value = Value
@@ -209,7 +207,6 @@ Tabs.Player:AddButton({
     end
 })
 
--- Section Informations
 Tabs.Player:AddButton({
     Title = "ℹ️ Informations Joueur",
     Description = "Afficher toutes les statistiques",
@@ -217,16 +214,16 @@ Tabs.Player:AddButton({
         local adminRank = player:FindFirstChild("AdminRank")
         local food = player:FindFirstChild("Food")
         local enColle = player:FindFirstChild("EnColle")
-        
+
         local info = "=== 📊 INFORMATIONS JOUEUR ===\n"
         info = info .. "👤 Nom: " .. player.Name .. "\n"
         info = info .. "🔑 AdminRank: " .. (adminRank and tostring(adminRank.Value) or "Non trouvé") .. "\n"
         info = info .. "🍎 Food: " .. (food and tostring(food.Value) or "Non trouvé") .. "\n"
         info = info .. "🏫 EnColle: " .. (enColle and tostring(enColle.Value) or "Non trouvé") .. "\n"
         info = info .. "🛡️ Anti-Détention: " .. (isEnColleActive and "ACTIF" or "INACTIF")
-        
+
         print(info)
-        
+
         Window:Dialog({
             Title = "Informations Joueur",
             Content = info,
@@ -242,30 +239,31 @@ Tabs.Player:AddButton({
     end
 })
 
--- Auto-refresh des valeurs
 local AutoRefreshToggle = Tabs.Player:AddToggle("AutoRefresh", {
     Title = "Auto-Actualisation",
     Description = "Met à jour automatiquement les sliders avec les vraies valeurs",
     Default = true
 })
 
--- Fonction d'auto-refresh
 local function autoRefresh()
     if Options.AutoRefresh.Value then
+        refreshing = true
+
         local adminRank = player:FindFirstChild("AdminRank")
         local food = player:FindFirstChild("Food")
-        
+
         if adminRank and AdminRankSlider then
             AdminRankSlider:SetValue(adminRank.Value)
         end
-        
+
         if food and FoodSlider then
             FoodSlider:SetValue(food.Value)
         end
+
+        refreshing = false
     end
 end
 
--- Lancer l'auto-refresh
 game:GetService("RunService").Heartbeat:Connect(function()
     if Options.AutoRefresh and Options.AutoRefresh.Value then
         autoRefresh()
@@ -298,7 +296,7 @@ local AdminKeybind = Tabs.Main:AddKeybind("AdminKeybind", {
 
 local FoodKeybind = Tabs.Player:AddKeybind("FoodKeybind", {
     Title = "Food Rapide",
-    Mode = "Toggle", 
+    Mode = "Toggle",
     Default = "F2",
     Callback = function(Value)
         if Value then
@@ -317,26 +315,21 @@ local FoodKeybind = Tabs.Player:AddKeybind("FoodKeybind", {
 })
 
 -- ================================
--- GESTION DES CONFIGURATIONS
+-- CONFIGURATION
 -- ================================
 
--- Configuration des managers
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-
 InterfaceManager:SetFolder("AdminPanel")
 SaveManager:SetFolder("AdminPanel/Configs")
-
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
--- Sélectionner le premier onglet
 Window:SelectTab(1)
 
--- Notification finale
 Fluent:Notify({
     Title = "🎉 Prêt!",
     Content = "Admin Panel complètement chargé",
@@ -344,14 +337,10 @@ Fluent:Notify({
     Duration = 8
 })
 
--- Charger la config auto si elle existe
 SaveManager:LoadAutoloadConfig()
 
--- Nettoyage à la fermeture
 game.Players.PlayerRemoving:Connect(function(plr)
-    if plr == player then
-        if enColleConnection then
-            enColleConnection:Disconnect()
-        end
+    if plr == player and enColleConnection then
+        enColleConnection:Disconnect()
     end
 end)

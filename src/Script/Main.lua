@@ -150,13 +150,16 @@ end
 local function getColor(plr)
     local adminRank = plr:FindFirstChild("AdminRank")
     local teamChangeId = plr:FindFirstChild("TeamChangeId")
+    local Grade = plr:FindFirstChild("Grade")
 
     if adminRank and adminRank.Value > 0 then
         return Color3.fromRGB(255, 0, 0) -- rouge
     elseif teamChangeId and teamChangeId.Value > 0 then
         return Color3.fromRGB(255, 165, 0) -- orange
-    else
+    elseif Grade and typeof(Grade.Value) == "string" and string.find(Grade.Value:lower(), "élève") then
         return Color3.fromRGB(255, 255, 255) -- blanc
+    else
+        return nil -- ou une autre couleur par défaut si tu veux
     end
 end
 

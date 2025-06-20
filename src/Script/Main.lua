@@ -1,12 +1,35 @@
--- Admin Script épuré avec Fluent UI
--- Héberger sur GitHub et charger via: loadstring(game:HttpGet("URL"))()
+-- ================================================================================
+-- SCHOOL FR RP SCRIPT - VERSION ORGANISÉE
+-- Pré-Alpha by Napixx
+-- ================================================================================
 
-local player = game.Players.LocalPlayer
+-- ================================================================================
+-- VARIABLES GLOBALES ET SERVICES
+-- ================================================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
 
 -- Charger Fluent UI et Addons
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- Variables pour Anti-Détention
+local isEnColleActive = false
+local enColleConnection = nil
+
+-- Variables pour ESP
+local highlights = {}
+local points = {}
+local ESP_Enabled = false
+local espConnection = nil
+local MAX_DISTANCE = 150
+
+-- ================================================================================
+-- CRÉATION DE L'INTERFACE
+-- ================================================================================
 
 -- Création de la fenêtre principale
 local Window = Fluent:CreateWindow({
@@ -19,29 +42,225 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.RightControl
 })
 
--- Création des onglets (ordre modifié pour mettre Visuel avant Paramètres)
+-- Création des onglets
 local Tabs = {
-    Main = Window:AddTab({ Title = "Admin", Icon = "shield" }),
+    Main = Window:AddTab({ Title = "Accueil", Icon = "home" }),
     Player = Window:AddTab({ Title = "Joueur", Icon = "user" }),
     Visuals = Window:AddTab({ Title = "Visuel", Icon = "eye" }),
     Settings = Window:AddTab({ Title = "Paramètres", Icon = "settings" })
 }
 
-local Options = Fluent.Options
-local isEnColleActive = false
-local enColleConnection = nil
 
---------------------------------------------------------------------------------
--- ONGLET ADMIN
---------------------------------------------------------------------------------
+local Options = Fluent.Options
+
+-- ================================================================================
+-- FONCTIONS UTILITAIRES
+-- ================================================================================
+
+-- Fonction pour obtenir les informations du joueur
+local function getPlayerStats()
+    local adminRank = player:FindFirstChild("AdminRank")
+    local food = player:FindFirstChild("Food")
+    local enColle = player:FindFirstChild("EnColle")
+    
+    return {
+        name = player.Name,
+        adminRank = adminRank and adminRank.Value or "Non trouvé",
+        food = food and food.Value or "Non trouvé",
+        enColle = enColle and enColle.Value or "Non trouvé",
+        antiDetention = isEnColleActive and "ACTIF" or "INACTIF"
+    }
+end
+
+-- Fonction pour afficher une notification
+local function showNotification(title, message, duration)
+    Fluent:Notify({
+        Title = title,
+        Content = message,
+        Duration = duration or 3
+    })
+end
+
+-- ================================================================================
+-- FONCTIONS ESP (VERSION OPTIMISÉE)
+-- ================================================================================
+
+-- Nettoyer l'ESP d'un joueur spécifique
+local function clearESP(plr)
+    if highlights[plr] then
+        highlights[plr]:Destroy()
+        highlights[plr] = nil
+    end
+    if points[plr] then
+        points[plr]:Destroy()
+        points[plr] = nil
+    end
+end
+
+-- Nettoyer tout l'ESP
+local function clearAllESP()
+    for plr, _ in pairs(highlights) do
+        clearESP(plr)
+    end
+    for plr, _ in pairs(points) do
+        clearESP(plr)
+    end
+    highlights = {}
+    points = {}
+end
+
+-- Obtenir la couleur selon le statut du joueur
+local function getPlayerColor(plr)
+    local adminRank = plr:FindFirstChild("AdminRank")
+    local teamChangeId = plr:FindFirstChild("TeamChangeId")
+    local Grade = plr:FindFirstChild("Grade")
+
+    -- Vérifier si les valeurs existent et sont chargées
+    if adminRank and adminRank.Value and adminRank.Value > 0 then
+        return Color3.fromRGB(255, 0, 0) -- Rouge pour admin
+    elseif teamChangeId and teamChangeId.Value and teamChangeId.Value > 0 then
+        return Color3.fromRGB(255, 165, 0) -- Orange pour staff
+    elseif Grade and typeof(Grade.Value) == "string" and Grade.Value ~= "" and string.find(Grade.Value, "Élève") then
+        return Color3.fromRGB(255, 255, 255) -- Blanc pour élèves
+    else
+        -- Couleur par défaut pour les nouveaux joueurs ou ceux sans données
+        return Color3.fromRGB(0, 255, 0) -- Vert par défaut
+    end
+end
+
+-- Créer un point ESP simple
+local function createESPPoint(plr, color)
+    local char = plr.Character
+    if not char then return end
+
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    -- Réutiliser l'ancien point si possible
+    if points[plr] then
+        points[plr].Frame.BackgroundColor3 = color
+        return
+    end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESPPoint_" .. plr.Name
+    billboard.Adornee = root
+    billboard.Size = UDim2.new(0, 10, 0, 10)
+    billboard.AlwaysOnTop = true
+    billboard.ResetOnSpawn = false
+
+    local frame = Instance.new("Frame")
+    frame.Name = "Frame"
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = color
+    frame.BorderSizePixel = 0
+    frame.BackgroundTransparency = 0.5
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    frame.Parent = billboard
+
+    -- Style circulaire simple
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = frame
+
+    billboard.Parent = char
+    points[plr] = billboard
+end
+
+-- Créer un highlight ESP simple
+local function createESPHighlight(plr, color)
+    local char = plr.Character
+    if not char then return end
+
+    -- Réutiliser l'ancien highlight si possible
+    if highlights[plr] then
+        highlights[plr].OutlineColor = color
+        return
+    end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "CustomESPHighlight_" .. plr.Name
+    highlight.Adornee = char
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.OutlineColor = color
+    highlight.Parent = char
+    highlights[plr] = highlight
+end
+
+-- Mettre à jour l'ESP (optimisé)
+local function updateESP()
+    if not ESP_Enabled then return end
+
+    local localChar = player.Character
+    if not localChar then return end
+    
+    local localRoot = localChar:FindFirstChild("HumanoidRootPart")
+    if not localRoot then return end
+
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= player then
+            local char = plr.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local root = char.HumanoidRootPart
+                local distance = (localRoot.Position - root.Position).Magnitude
+                local color = getPlayerColor(plr)
+
+                if distance <= MAX_DISTANCE then
+                    -- Joueur proche : utiliser highlight
+                    if points[plr] then
+                        points[plr]:Destroy()
+                        points[plr] = nil
+                    end
+                    createESPHighlight(plr, color)
+                else
+                    -- Joueur lointain : utiliser point
+                    if highlights[plr] then
+                        highlights[plr]:Destroy()
+                        highlights[plr] = nil
+                    end
+                    createESPPoint(plr, color)
+                end
+            else
+                -- Pas de personnage, nettoyer
+                clearESP(plr)
+            end
+        end
+    end
+end
+
+-- Activer/Désactiver l'ESP
+local function toggleESP(enabled)
+    ESP_Enabled = enabled
+    
+    if enabled then
+        if not espConnection then
+            espConnection = RunService.Heartbeat:Connect(updateESP)
+        end
+    else
+        if espConnection then
+            espConnection:Disconnect()
+            espConnection = nil
+        end
+        clearAllESP()
+    end
+end
+
+-- ================================================================================
+-- ONGLET Main
+-- ================================================================================
 
 Tabs.Main:AddButton({
-    Title = "🔥 Admin Max (60)",
+    Title = "🔥 Fake Admin",
     Description = "Définir le rang admin au maximum",
     Callback = function()
         local adminRank = player:FindFirstChild("AdminRank")
         if adminRank then
             adminRank.Value = 60
+            showNotification("Admin", "Rang admin défini à 60!")
+        else
+            showNotification("Erreur", "AdminRank non trouvé!")
         end
     end
 })
@@ -54,235 +273,236 @@ local AntiColleToggle = Tabs.Main:AddToggle("AntiColle", {
 
 AntiColleToggle:OnChanged(function()
     local enColle = player:FindFirstChild("EnColle")
-    if not enColle then return end
+    if not enColle then 
+        showNotification("Erreur", "EnColle non trouvé!")
+        return 
+    end
 
     if Options.AntiColle.Value then
         isEnColleActive = true
-        enColleConnection = game:GetService("RunService").Heartbeat:Connect(function()
-            enColle.Value = 0
+        enColleConnection = RunService.Heartbeat:Connect(function()
+            if enColle.Value ~= 0 then
+                enColle.Value = 0
+            end
         end)
+        showNotification("Anti-Détention", "Protection activée!")
     else
         isEnColleActive = false
         if enColleConnection then
             enColleConnection:Disconnect()
             enColleConnection = nil
         end
+        showNotification("Anti-Détention", "Protection désactivée!")
     end
 end)
 
---------------------------------------------------------------------------------
+
+-- ================================================================================
+-- (Ton script complet existant ici...)
+-- ================================================================================
+
+-- Variables Fly (à placer avec les autres variables globales)
+local flyEnabled = false
+local flyConnection = nil
+local flyBody = nil
+local flySpeed = 35 -- valeur par défaut
+
+-- Fonction toggle Fly optimisée
+local function toggleFly(state)
+    local char = player.Character
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    -- Si l'état est passé explicitement (bool) sinon toggle
+    if type(state) == "boolean" then
+        flyEnabled = state
+    else
+        flyEnabled = not flyEnabled
+    end
+
+    if flyEnabled then
+        if flyBody then flyBody:Destroy() end
+
+        flyBody = Instance.new("BodyVelocity")
+        flyBody.Name = "FlyVelocity"
+        flyBody.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        flyBody.P = 1250
+        flyBody.Velocity = Vector3.new(0, 0, 0)
+        flyBody.Parent = root
+
+        flyConnection = RunService.RenderStepped:Connect(function()
+            local camera = workspace.CurrentCamera
+            local direction = Vector3.new(0, 0, 0)
+            local UIS = UserInputService
+
+            if UIS:IsKeyDown(Enum.KeyCode.W) then
+                direction = direction + camera.CFrame.LookVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then
+                direction = direction - camera.CFrame.LookVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then
+                direction = direction - camera.CFrame.RightVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then
+                direction = direction + camera.CFrame.RightVector
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then
+                direction = direction + Vector3.new(0, 1, 0)
+            end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+                direction = direction - Vector3.new(0, 1, 0)
+            end
+
+            if direction.Magnitude > 0 then
+                flyBody.Velocity = direction.Unit * flySpeed
+            else
+                flyBody.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+
+        showNotification("Fly", "Vol activé")
+    else
+        if flyConnection then
+            flyConnection:Disconnect()
+            flyConnection = nil
+        end
+        if flyBody then
+            flyBody:Destroy()
+            flyBody = nil
+        end
+        showNotification("Fly", "Vol désactivé")
+    end
+end
+
+-- ================================================================================
+-- AJOUT DANS L'ONGLET MAIN
+-- ================================================================================
+
+-- Toggle Fly
+local flyToggle = Tabs.Main:AddToggle("FlyToggle", {
+    Title = "Vol (Fly)",
+    Description = "Activer/désactiver le vol",
+    Default = false
+})
+
+flyToggle:OnChanged(function(value)
+    toggleFly(value)
+end)
+
+-- Slider vitesse Fly
+flySpeedOption = Tabs.Main:AddSlider("FlySpeed", {
+    Title = "Vitesse de vol",
+    Description = "Définit la vitesse de déplacement en vol",
+    Default = flySpeed,
+    Min = 10,
+    Max = 150,
+    Rounding = 0,
+    Callback = function(value)
+        flySpeed = value
+    end
+})
+
+-- Keybind Fly (toggle)
+Tabs.Main:AddKeybind("FlyKeybind", {
+    Title = "Raccourci Vol (Fly)",
+    Mode = "Toggle",
+    Default = "P",
+    Callback = function(active)
+        flyToggle:SetValue(active)
+    end
+})
+
+-- ================================================================================
+-- (Le reste de ton script...)
+-- ================================================================================
+
+
+
+
+-- ================================================================================
 -- ONGLET JOUEUR
---------------------------------------------------------------------------------
+-- ================================================================================
 
 Tabs.Player:AddButton({
-    Title = "🍎 Nourriture Infini",
-    Description = "Restaurer la nourriture au maximum",
+    Title = "🍎 Nourriture Infinie",
+    Description = "Restaurer la nourriture au maximum en continu",
     Callback = function()
         local food = player:FindFirstChild("Food")
         if food then
             coroutine.wrap(function()
-                while true do
+                while food and food.Parent do
                     food.Value = 100
-                    wait()
+                    wait(0.1)
                 end
             end)()
+            showNotification("Nourriture", "Nourriture infinie activée!")
+        else
+            showNotification("Erreur", "Food non trouvé!")
         end
     end
 })
 
 Tabs.Player:AddButton({
-    Title = "ℹ️ Infos Joueur",
-    Description = "Afficher vos statistiques",
+    Title = "💰 Reset Food",
+    Description = "Remettre la nourriture à zéro",
     Callback = function()
-        local adminRank = player:FindFirstChild("AdminRank")
         local food = player:FindFirstChild("Food")
-        local enColle = player:FindFirstChild("EnColle")
+        if food then
+            food.Value = 0
+            showNotification("Food", "Nourriture remise à zéro!")
+        else
+            showNotification("Erreur", "Food non trouvé!")
+        end
+    end
+})
 
-        local info = "=== INFOS JOUEUR ===\n"
-        info = info .. "👤 Nom: " .. player.Name .. "\n"
-        info = info .. "🔑 AdminRank: " .. (adminRank and adminRank.Value or "Non trouvé") .. "\n"
-        info = info .. "🍎 Food: " .. (food and food.Value or "Non trouvé") .. "\n"
-        info = info .. "🏫 EnColle: " .. (enColle and enColle.Value or "Non trouvé") .. "\n"
-        info = info .. "🛡️ Anti-Détention: " .. (isEnColleActive and "ACTIF" or "INACTIF")
+Tabs.Player:AddButton({
+    Title = "ℹ️ Informations Joueur",
+    Description = "Afficher vos statistiques complètes",
+    Callback = function()
+        local stats = getPlayerStats()
+        
+        local info = "=== INFORMATIONS JOUEUR ===\n\n"
+        info = info .. "👤 Nom: " .. stats.name .. "\n"
+        info = info .. "🔑 AdminRank: " .. stats.adminRank .. "\n"
+        info = info .. "🍎 Food: " .. stats.food .. "\n"
+        info = info .. "🏫 EnColle: " .. stats.enColle .. "\n"
+        info = info .. "🛡️ Anti-Détention: " .. stats.antiDetention .. "\n"
+        info = info .. "👁️ ESP: " .. (ESP_Enabled and "ACTIF" or "INACTIF")
 
         Window:Dialog({
-            Title = "Statistiques",
+            Title = "Statistiques Joueur",
             Content = info,
-            Buttons = { { Title = "OK" } }
+            Buttons = {
+                {
+                    Title = "OK",
+                    Callback = function()
+                        print("Statistiques fermées")
+                    end
+                }
+            }
         })
     end
 })
 
---------------------------------------------------------------------------------
--- ONGLET VISUEL (ESP Joueurs)
---------------------------------------------------------------------------------
+-- ================================================================================
+-- ONGLET VISUEL
+-- ================================================================================
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-
-local LocalPlayer = Players.LocalPlayer
-local highlights = {}
-local points = {}
-local ESP_Enabled = false
-
-local MAX_DISTANCE = 150 -- Distance max pour contour, au-delà ce sera un point
-
-local function clearESP(plr)
-    if highlights[plr] then
-        highlights[plr]:Destroy()
-        highlights[plr] = nil
-    end
-    if points[plr] then
-        points[plr]:Destroy()
-        points[plr] = nil
-    end
-end
-
-local function clearAllESP()
-    for plr, _ in pairs(highlights) do
-        clearESP(plr)
-    end
-    for plr, _ in pairs(points) do
-        clearESP(plr)
-    end
-end
-
-local function getColor(plr)
-    local adminRank = plr:FindFirstChild("AdminRank")
-    local teamChangeId = plr:FindFirstChild("TeamChangeId")
-    local Grade = plr:FindFirstChild("Grade")
-
-    if adminRank and adminRank.Value > 0 then
-        return Color3.fromRGB(255, 0, 0) -- rouge
-    elseif teamChangeId and teamChangeId.Value > 0 then
-        return Color3.fromRGB(255, 165, 0) -- orange
-    elseif Grade and typeof(Grade.Value) == "string" and string.find(Grade.Value, "Élève") then
-        return Color3.fromRGB(255, 255, 255) -- blanc
-    else
-        return nil -- ou autre couleur
-    end
-end
-
-
-local function createPoint(plr, color)
-    local char = plr.Character
-    if not char then return end
-
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    if points[plr] then
-        points[plr].Frame.BackgroundColor3 = color
-        return
-    end
-
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "ESPPoint"
-    billboard.Adornee = root
-    billboard.Size = UDim2.new(0, 10, 0, 10)
-    billboard.AlwaysOnTop = true
-    billboard.ResetOnSpawn = false
-
-    local frame = Instance.new("Frame")
-    frame.Name = "Frame"
-    frame.Size = UDim2.new(1, 0, 1, 0)
-    frame.BackgroundColor3 = color
-    frame.BorderSizePixel = 0
-    frame.BackgroundTransparency = 0.5 -- un peu transparent
-    frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    frame.Parent = billboard
-
-    -- Cercle (rond)
-    frame.ClipsDescendants = true
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(1, 0) -- Cercle parfait
-    corner.Parent = frame
-
-    billboard.Parent = char
-    points[plr] = billboard
-end
-
-local function createHighlight(plr, color)
-    local char = plr.Character
-    if not char then return end
-
-    if highlights[plr] then
-        highlights[plr].OutlineColor = color
-        return
-    end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "CustomESPHighlight"
-    highlight.Adornee = char
-    highlight.FillTransparency = 1
-    highlight.OutlineTransparency = 0
-    highlight.OutlineColor = color
-    highlight.Parent = char
-    highlights[plr] = highlight
-end
-
-local function updateESP()
-    if not ESP_Enabled then
-        clearAllESP()
-        return
-    end
-
-    local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not localRoot then return end
-
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local root = plr.Character.HumanoidRootPart
-            local dist = (localRoot.Position - root.Position).Magnitude
-            local color = getColor(plr)
-
-            if dist <= MAX_DISTANCE then
-                -- Proche : Highlight contour, supprimer point s'il existe
-                if points[plr] then
-                    points[plr]:Destroy()
-                    points[plr] = nil
-                end
-                createHighlight(plr, color)
-            else
-                -- Loin : Afficher point, supprimer highlight s'il existe
-                if highlights[plr] then
-                    highlights[plr]:Destroy()
-                    highlights[plr] = nil
-                end
-                createPoint(plr, color)
-            end
-        else
-            clearESP(plr)
-        end
-    end
-end
-
-RunService.Heartbeat:Connect(function()
-    if ESP_Enabled then
-        updateESP()
-    else
-        clearAllESP()
-    end
-end)
-
--- Toggle ESP dans onglet Visuel
 local ESPToggle = Tabs.Visuals:AddToggle("ESPToggle", {
     Title = "ESP Joueurs",
-    Description = "Afficher contour proche ou point rond loin selon AdminRank et TeamChangeId",
+    Description = "Contour pour joueurs proches, points pour joueurs lointains",
     Default = false,
 })
 
 ESPToggle:OnChanged(function(value)
-    ESP_Enabled = value
-    if not ESP_Enabled then
-        clearAllESP()
-    end
+    toggleESP(value)
 end)
 
--- Keybind pour toggle ESP (touche N)
 Tabs.Visuals:AddKeybind("ESPToggleKeybind", {
-    Title = "N - Activer/Désactiver ESP",
+    Title = "Raccourci ESP",
     Mode = "Toggle",
     Default = "N",
     Callback = function(active)
@@ -290,26 +510,132 @@ Tabs.Visuals:AddKeybind("ESPToggleKeybind", {
     end
 })
 
---------------------------------------------------------------------------------
--- ONGLET PARAMÈTRES (sans configuration)
---------------------------------------------------------------------------------
+Tabs.Visuals:AddSlider("ESPDistance", {
+    Title = "Distance ESP",
+    Description = "Distance maximale pour les contours (au-delà = points)",
+    Default = 150,
+    Min = 50,
+    Max = 500,
+    Rounding = 0,
+    Increment = 50,
+    Callback = function(value)
+        MAX_DISTANCE = value
+    end
+})
 
--- Tu peux ajouter ici d'autres options dans Paramètres si besoin, mais
--- pour l'instant la section configuration est retirée car inutile.
+-- Légende des couleurs
+Tabs.Visuals:AddSection("Légende Couleurs ESP")
+Tabs.Visuals:AddParagraph({
+    Title = "🔴 Rouge",
+    Content = "Administrateurs (joueur possedent un minmum de permision)"
+})
+Tabs.Visuals:AddParagraph({
+    Title = "🟠 Orange", 
+    Content = "Employer (joueur possedent un travaille)"
+})
+Tabs.Visuals:AddParagraph({
+    Title = "⚪ Blanc",
+    Content = "Élèves"
+})
+Tabs.Visuals:AddParagraph({
+    Title = "🟢 Vert",
+    Content = "Autres joueurs"
+})
 
---------------------------------------------------------------------------------
--- FERMETURE ET CLEANUP
---------------------------------------------------------------------------------
+-- ================================================================================
+-- ONGLET PARAMÈTRES
+-- ================================================================================
 
-game.Players.PlayerRemoving:Connect(function(plr)
-    if plr == player and enColleConnection then
-        enColleConnection:Disconnect()
+Tabs.Settings:AddButton({
+    Title = "🔄 Recharger Script",
+    Description = "Recharger complètement le script",
+    Callback = function()
+        Window:Dialog({
+            Title = "Confirmation",
+            Content = "Êtes-vous sûr de vouloir recharger le script?\nToutes les configurations actuelles seront perdues.",
+            Buttons = {
+                {
+                    Title = "Oui",
+                    Callback = function()
+                        -- Nettoyage complet
+                        if enColleConnection then
+                            enColleConnection:Disconnect()
+                        end
+                        if espConnection then
+                            espConnection:Disconnect()
+                        end
+                        clearAllESP()
+                        
+                        -- Fermer la fenêtre
+                        Window:Destroy()
+                        
+                        -- Recharger le script (vous devrez adapter cette partie)
+                        showNotification("Script", "Rechargement...")
+                    end
+                },
+                {
+                    Title = "Non",
+                    Callback = function()
+                        print("Rechargement annulé")
+                    end
+                }
+            }
+        })
+    end
+})
+
+Tabs.Settings:AddButton({
+    Title = "🗑️ Nettoyer ESP",
+    Description = "Supprimer tous les éléments ESP restants",
+    Callback = function()
+        clearAllESP()
+        showNotification("Nettoyage", "ESP nettoyé!")
+    end
+})
+
+-- ================================================================================
+-- GESTION DES ÉVÉNEMENTS
+-- ================================================================================
+
+-- Nettoyage quand un joueur quitte
+Players.PlayerRemoving:Connect(function(plr)
+    clearESP(plr)
+end)
+
+-- Nettoyage quand le joueur local quitte
+Players.PlayerRemoving:Connect(function(plr)
+    if plr == player then
+        if enColleConnection then
+            enColleConnection:Disconnect()
+        end
+        if espConnection then
+            espConnection:Disconnect()
+        end
+        clearAllESP()
     end
 end)
 
---------------------------------------------------------------------------------
+-- ================================================================================
 -- INITIALISATION
---------------------------------------------------------------------------------
+-- ================================================================================
 
-Window:SelectTab(1) -- Onglet Admin par défaut
+-- Sélectionner l'onglet Admin par défaut
+Window:SelectTab(1)
+
+-- Charger la configuration automatique
 SaveManager:LoadAutoloadConfig()
+
+-- Initialiser AdminRank à 1 si trouvé
+local adminRank = player:FindFirstChild("AdminRank")
+if adminRank then
+    adminRank.Value = 1
+end
+
+-- Notification de démarrage
+showNotification("Script Chargé", "School FR RP Script prêt à l'emploi!", 5)
+
+print("=== SCHOOL FR RP SCRIPT CHARGÉ ===")
+print("Version: Pré-Alpha by Napixx")
+print("Onglets: Admin, Joueur, Visuel, Paramètres")
+print("ESP: Touche N pour activer/désactiver")
+print("=======================================")

@@ -513,13 +513,13 @@ Tabs.Visuals:AddKeybind("ESPToggleKeybind", {
 Tabs.Visuals:AddSlider("ESPDistance", {
     Title = "Distance ESP",
     Description = "Distance maximale pour les contours (au-delà = points)",
-    Default = 150,
-    Min = 50,
-    Max = 500,
+    Default = 5,
+    Min = 0,
+    Max = 10,
     Rounding = 0,
     Increment = 50,
     Callback = function(value)
-        MAX_DISTANCE = value
+        MAX_DISTANCE = value * 70
     end
 })
 

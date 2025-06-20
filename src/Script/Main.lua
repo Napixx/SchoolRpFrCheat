@@ -44,7 +44,7 @@ local Window = Fluent:CreateWindow({
 
 -- Création des onglets
 local Tabs = {
-    Main = Window:AddTab({ Title = "Accueil", Icon = "home" }),
+    Main = Window:AddTab({ Title = "Générale ", Icon = "home" }),
     Player = Window:AddTab({ Title = "Joueur", Icon = "user" }),
     Visuals = Window:AddTab({ Title = "Visuel", Icon = "eye" }),
     Settings = Window:AddTab({ Title = "Paramètres", Icon = "settings" })
@@ -296,134 +296,47 @@ AntiColleToggle:OnChanged(function()
     end
 end)
 
-
--- ================================================================================
--- (Ton script complet existant ici...)
--- ================================================================================
-
--- Variables Fly (à placer avec les autres variables globales)
-local flyEnabled = false
-local flyConnection = nil
-local flyBody = nil
-local flySpeed = 35 -- valeur par défaut
-
--- Fonction toggle Fly optimisée
-local function toggleFly(state)
-    local char = player.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    -- Si l'état est passé explicitement (bool) sinon toggle
-    if type(state) == "boolean" then
-        flyEnabled = state
-    else
-        flyEnabled = not flyEnabled
-    end
-
-    if flyEnabled then
-        if flyBody then flyBody:Destroy() end
-
-        flyBody = Instance.new("BodyVelocity")
-        flyBody.Name = "FlyVelocity"
-        flyBody.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        flyBody.P = 1250
-        flyBody.Velocity = Vector3.new(0, 0, 0)
-        flyBody.Parent = root
-
-        flyConnection = RunService.RenderStepped:Connect(function()
-            local camera = workspace.CurrentCamera
-            local direction = Vector3.new(0, 0, 0)
-            local UIS = UserInputService
-
-            if UIS:IsKeyDown(Enum.KeyCode.W) then
-                direction = direction + camera.CFrame.LookVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then
-                direction = direction - camera.CFrame.LookVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then
-                direction = direction - camera.CFrame.RightVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then
-                direction = direction + camera.CFrame.RightVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.Space) then
-                direction = direction + Vector3.new(0, 1, 0)
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
-                direction = direction - Vector3.new(0, 1, 0)
-            end
-
-            if direction.Magnitude > 0 then
-                flyBody.Velocity = direction.Unit * flySpeed
-            else
-                flyBody.Velocity = Vector3.new(0, 0, 0)
-            end
-        end)
-
-        showNotification("Fly", "Vol activé")
-    else
-        if flyConnection then
-            flyConnection:Disconnect()
-            flyConnection = nil
-        end
-        if flyBody then
-            flyBody:Destroy()
-            flyBody = nil
-        end
-        showNotification("Fly", "Vol désactivé")
-    end
-end
-
--- ================================================================================
--- AJOUT DANS L'ONGLET MAIN
--- ================================================================================
-
--- Toggle Fly
-local flyToggle = Tabs.Main:AddToggle("FlyToggle", {
-    Title = "Vol (Fly)",
-    Description = "Activer/désactiver le vol",
-    Default = false
-})
-
-flyToggle:OnChanged(function(value)
-    toggleFly(value)
-end)
-
--- Slider vitesse Fly
-flySpeedOption = Tabs.Main:AddSlider("FlySpeed", {
-    Title = "Vitesse de vol",
-    Description = "Définit la vitesse de déplacement en vol",
-    Default = flySpeed,
-    Min = 10,
-    Max = 150,
-    Rounding = 0,
-    Callback = function(value)
-        flySpeed = value
-    end
-})
-
--- Keybind Fly (toggle)
-Tabs.Main:AddKeybind("FlyKeybind", {
-    Title = "Raccourci Vol (Fly)",
-    Mode = "Toggle",
-    Default = "P",
-    Callback = function(active)
-        flyToggle:SetValue(active)
-    end
-})
-
--- ================================================================================
--- (Le reste de ton script...)
--- ================================================================================
-
-
-
-
 -- ================================================================================
 -- ONGLET JOUEUR
 -- ================================================================================
+
+local SpeedToggle = Tabs.Player:AddToggle("FlyToggle", {
+    Title = "Speed",
+    Description = "Activer/désactiver la Vitesse",
+    Default = false
+})
+
+SpeedToggle:OnChanged(function(value)
+    local effectFolder = player:FindFirstChild("Effect")
+    local speedEffect = effectFolder and effectFolder:FindFirstChild("SpeedEffect")
+
+
+    if speedEffect then
+        if value then
+            speedEffect.Value = 1
+            showNotification("Speed", "Vitesse activée")
+        else
+            speedEffect.Value = 0
+            showNotification("Speed", "Vitesse désactivée")
+        end
+    else
+        showNotification("Erreur", "SpeedEffect ou Humanoid non trouvé")
+    end
+end)
+
+Tabs.Player:AddKeybind("SpeedEffectKeybind", {
+    Title = "Raccourci Vitesse",
+    Mode = "Toggle",
+    Default = "B",
+    Callback = function(active)
+        SpeedToggle:SetValue(active)
+    end
+})
+
+
+Tabs.Player:AddSection("Capacités")
+
+
 
 Tabs.Player:AddButton({
     Title = "🍎 Nourriture Infinie",
@@ -487,6 +400,14 @@ Tabs.Player:AddButton({
     end
 })
 
+
+
+
+
+
+
+
+
 -- ================================================================================
 -- ONGLET VISUEL
 -- ================================================================================
@@ -517,7 +438,7 @@ Tabs.Visuals:AddSlider("ESPDistance", {
     Min = 0,
     Max = 10,
     Rounding = 0,
-    Increment = 50,
+    Increment = 1,
     Callback = function(value)
         MAX_DISTANCE = value * 70
     end

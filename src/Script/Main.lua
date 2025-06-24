@@ -1,5 +1,5 @@
 -- ================================================================================
--- SCHOOL FR RP SCRIPT - VERSION ORGANISÉE
+-- SCHOOL FR RP SCRIPT - VERSION ORGANISÉE AVEC FLY SIMPLIFIÉ
 -- Pré-Alpha by Napixx
 -- ================================================================================
 
@@ -9,6 +9,7 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 
 -- Charger Fluent UI et Addons
@@ -26,6 +27,12 @@ local points = {}
 local ESP_Enabled = false
 local espConnection = nil
 local MAX_DISTANCE = 150
+
+-- Variables pour le système de vol simplifié
+local flySpeed = 50
+local flyEnabled = false
+local ctrl = {f = 0, b = 0, l = 0, r = 0}
+local flyBodyObjects = {}
 
 -- ================================================================================
 -- CRÉATION DE L'INTERFACE
@@ -50,7 +57,6 @@ local Tabs = {
     Settings = Window:AddTab({ Title = "Paramètres", Icon = "settings" })
 }
 
-
 local Options = Fluent.Options
 
 -- ================================================================================
@@ -68,7 +74,8 @@ local function getPlayerStats()
         adminRank = adminRank and adminRank.Value or "Non trouvé",
         food = food and food.Value or "Non trouvé",
         enColle = enColle and enColle.Value or "Non trouvé",
-        antiDetention = isEnColleActive and "ACTIF" or "INACTIF"
+        antiDetention = isEnColleActive and "ACTIF" or "INACTIF",
+        flyStatus = flyEnabled and "ACTIF" or "INACTIF"
     }
 end
 
@@ -79,6 +86,143 @@ local function showNotification(title, message, duration)
         Content = message,
         Duration = duration or 3
     })
+end
+
+-- ================================================================================
+-- FONCTIONS FLY SYSTEM SIMPLIFIÉ
+-- ================================================================================
+
+-- Nettoyer les objets de vol
+local function cleanupFlyObjects()
+    for _, obj in pairs(flyBodyObjects) do
+        if obj and obj.Parent then
+            obj:Destroy()
+        end
+    end
+    flyBodyObjects = {}
+end
+
+-- Fonction principale de vol simplifiée
+local function toggleFly()
+    local character = player.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+    if not humanoid then return end
+
+    if flyEnabled then
+        -- Désactiver le vol
+        flyEnabled = false
+        cleanupFlyObjects()
+
+        -- Restaurer les états du Humanoid
+        for _, state in pairs(Enum.HumanoidStateType:GetEnumItems()) do
+            humanoid:SetStateEnabled(state, true)
+        end
+        humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+        humanoid.PlatformStand = false
+        
+        showNotification("Vol", "Vol désactivé")
+    else
+        -- Activer le vol
+        flyEnabled = true
+        
+        -- Logique de vol simplifiée pour R6 et R15
+        spawn(function()
+            local rigType = humanoid.RigType
+            local bodyPart = rigType == Enum.HumanoidRigType.R6 and character:FindFirstChild("Torso") or character:FindFirstChild("UpperTorso")
+            
+            if not bodyPart then return end
+            
+            local bodyGyro = Instance.new("BodyGyro")
+            bodyGyro.P = 9e4
+            bodyGyro.maxTorque = Vector3.new(9e9, 9e9, 9e9)
+            bodyGyro.cframe = bodyPart.CFrame
+            bodyGyro.Parent = bodyPart
+            table.insert(flyBodyObjects, bodyGyro)
+            
+            local bodyVelocity = Instance.new("BodyVelocity")
+            bodyVelocity.velocity = Vector3.new(0, 0.1, 0)
+            bodyVelocity.maxForce = Vector3.new(9e9, 9e9, 9e9)
+            bodyVelocity.Parent = bodyPart
+            table.insert(flyBodyObjects, bodyVelocity)
+            
+            humanoid.PlatformStand = true
+            
+            while flyEnabled and character.Parent and humanoid.Health > 0 do
+                wait()
+                
+                -- Calcul de la direction sans accélération progressive
+                local moveVector = Vector3.new(0, 0, 0)
+                
+                if ctrl.f == 1 or ctrl.b == -1 then
+                    moveVector = moveVector + (workspace.CurrentCamera.CoordinateFrame.lookVector * (ctrl.f + ctrl.b))
+                end
+                
+                if ctrl.l == -1 or ctrl.r == 1 then
+                    moveVector = moveVector + (workspace.CurrentCamera.CoordinateFrame.rightVector * (ctrl.l + ctrl.r))
+                end
+                
+                -- Appliquer la vitesse constante
+                bodyVelocity.velocity = moveVector * flySpeed
+                
+                -- Orienter le personnage selon la caméra (sans animation)
+                bodyGyro.cframe = workspace.CurrentCamera.CoordinateFrame
+            end
+            
+            -- Nettoyage final
+            humanoid.PlatformStand = false
+            cleanupFlyObjects()
+        end)
+        
+        showNotification("Vol", "Vol activé - Vitesse: " .. flySpeed)
+    end
+end
+
+-- Gestion des contrôles de vol
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed or not flyEnabled then return end
+    
+    if input.KeyCode == Enum.KeyCode.W then
+        ctrl.f = 1
+    elseif input.KeyCode == Enum.KeyCode.S then
+        ctrl.b = -1
+    elseif input.KeyCode == Enum.KeyCode.A then
+        ctrl.l = -1
+    elseif input.KeyCode == Enum.KeyCode.D then
+        ctrl.r = 1
+    elseif input.KeyCode == Enum.KeyCode.E then
+        -- Monter
+        local character = player.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            character.HumanoidRootPart.CFrame = character.HumanoidRootPart.CFrame * CFrame.new(0, 2, 0)
+        end
+    elseif input.KeyCode == Enum.KeyCode.Q then
+        -- Descendre
+        local character = player.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            character.HumanoidRootPart.CFrame = character.HumanoidRootPart.CFrame * CFrame.new(0, -2, 0)
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if gameProcessed or not flyEnabled then return end
+    
+    if input.KeyCode == Enum.KeyCode.W then
+        ctrl.f = 0
+    elseif input.KeyCode == Enum.KeyCode.S then
+        ctrl.b = 0
+    elseif input.KeyCode == Enum.KeyCode.A then
+        ctrl.l = 0
+    elseif input.KeyCode == Enum.KeyCode.D then
+        ctrl.r = 0
+    end
+end)
+
+-- Mettre à jour la vitesse de vol
+local function updateFlySpeed(newSpeed)
+    flySpeed = newSpeed
 end
 
 -- ================================================================================
@@ -300,7 +444,52 @@ end)
 -- ONGLET JOUEUR
 -- ================================================================================
 
-local SpeedToggle = Tabs.Player:AddToggle("FlyToggle", {
+-- Section Vol
+Tabs.Player:AddSection("Système de Vol")
+
+local FlyToggle = Tabs.Player:AddToggle("FlyToggle", {
+    Title = "Vol",
+    Description = "Activer/désactiver le système de vol",
+    Default = false
+})
+
+FlyToggle:OnChanged(function(value)
+    if value ~= flyEnabled then
+        toggleFly()
+    end
+end)
+
+Tabs.Player:AddKeybind("FlyKeybind", {
+    Title = "Raccourci Vol",
+    Mode = "Toggle",
+    Default = "P",
+    Callback = function(active)
+        FlyToggle:SetValue(active)
+    end
+})
+
+Tabs.Player:AddSlider("FlySpeed", {
+    Title = "Vitesse de Vol",
+    Description = "Ajuster la vitesse du vol (20-100)",
+    Default = 20,
+    Min = 0,
+    Max = 35,
+    Rounding = 0,
+    Increment = 5,
+    Callback = function(value)
+        updateFlySpeed(value)
+    end
+})
+
+Tabs.Player:AddParagraph({
+    Title = "Contrôles de Vol",
+    Content = "WASD: Se déplacer\nE: Monter\nQ: Descendre\nP: Activer/Désactiver (par défaut)"
+})
+
+-- Section Vitesse
+Tabs.Player:AddSection("Capacités")
+
+local SpeedToggle = Tabs.Player:AddToggle("SpeedToggle", {
     Title = "Speed",
     Description = "Activer/désactiver la Vitesse",
     Default = false
@@ -309,7 +498,6 @@ local SpeedToggle = Tabs.Player:AddToggle("FlyToggle", {
 SpeedToggle:OnChanged(function(value)
     local effectFolder = player:FindFirstChild("Effect")
     local speedEffect = effectFolder and effectFolder:FindFirstChild("SpeedEffect")
-
 
     if speedEffect then
         if value then
@@ -332,11 +520,6 @@ Tabs.Player:AddKeybind("SpeedEffectKeybind", {
         SpeedToggle:SetValue(active)
     end
 })
-
-
-Tabs.Player:AddSection("Capacités")
-
-
 
 Tabs.Player:AddButton({
     Title = "🍎 Nourriture Infinie",
@@ -383,6 +566,7 @@ Tabs.Player:AddButton({
         info = info .. "🍎 Food: " .. stats.food .. "\n"
         info = info .. "🏫 EnColle: " .. stats.enColle .. "\n"
         info = info .. "🛡️ Anti-Détention: " .. stats.antiDetention .. "\n"
+        info = info .. "✈️ Vol: " .. stats.flyStatus .. "\n"
         info = info .. "👁️ ESP: " .. (ESP_Enabled and "ACTIF" or "INACTIF")
 
         Window:Dialog({
@@ -399,14 +583,6 @@ Tabs.Player:AddButton({
         })
     end
 })
-
-
-
-
-
-
-
-
 
 -- ================================================================================
 -- ONGLET VISUEL
@@ -486,6 +662,7 @@ Tabs.Settings:AddButton({
                             espConnection:Disconnect()
                         end
                         clearAllESP()
+                        cleanupFlyObjects()
                         
                         -- Fermer la fenêtre
                         Window:Destroy()
@@ -514,6 +691,18 @@ Tabs.Settings:AddButton({
     end
 })
 
+Tabs.Settings:AddButton({
+    Title = "🛑 Arrêter Vol",
+    Description = "Forcer l'arrêt du système de vol",
+    Callback = function()
+        if flyEnabled then
+            toggleFly()
+        end
+        cleanupFlyObjects()
+        showNotification("Vol", "Système de vol forcé à l'arrêt!")
+    end
+})
+
 -- ================================================================================
 -- GESTION DES ÉVÉNEMENTS
 -- ================================================================================
@@ -521,6 +710,22 @@ Tabs.Settings:AddButton({
 -- Nettoyage quand un joueur quitte
 Players.PlayerRemoving:Connect(function(plr)
     clearESP(plr)
+end)
+
+-- Gestion des respawns
+player.CharacterAdded:Connect(function(char)
+    wait(0.7)
+    local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+    if humanoid then
+        humanoid.PlatformStand = false
+    end
+    
+    -- Réinitialiser les variables de vol
+    flyEnabled = false
+    cleanupFlyObjects()
+    if Options.FlyToggle then
+        Options.FlyToggle:SetValue(false)
+    end
 end)
 
 -- Nettoyage quand le joueur local quitte
@@ -533,6 +738,7 @@ Players.PlayerRemoving:Connect(function(plr)
             espConnection:Disconnect()
         end
         clearAllESP()
+        cleanupFlyObjects()
     end
 end)
 
@@ -553,10 +759,12 @@ if adminRank then
 end
 
 -- Notification de démarrage
-showNotification("Script Chargé", "School FR RP Script prêt à l'emploi!", 5)
+showNotification("Script Chargé", "School FR RP Script avec Vol Simplifié prêt à l'emploi!", 5)
 
-print("=== SCHOOL FR RP SCRIPT CHARGÉ ===")
-print("Version: Pré-Alpha by Napixx")
+print("=== SCHOOL FR RP SCRIPT AVEC VOL SIMPLIFIÉ CHARGÉ ===")
+print("Version: Pré-Alpha by Napixx + Fly System Simplifié")
 print("Onglets: Admin, Joueur, Visuel, Paramètres")
+print("Vol: Touche F pour activer/désactiver (par défaut)")
 print("ESP: Touche N pour activer/désactiver")
-print("=======================================")
+print("Contrôles Vol: WASD + E/Q pour monter/descendre")
+print("===============================================")

@@ -54,6 +54,7 @@ local Tabs = {
     Main = Window:AddTab({ Title = "Générale ", Icon = "home" }),
     Player = Window:AddTab({ Title = "Joueur", Icon = "user" }),
     Visuals = Window:AddTab({ Title = "Visuel", Icon = "eye" }),
+    Misc = Window:AddTab({ Title = "Misc", Icon = "box" })
     Settings = Window:AddTab({ Title = "Paramètres", Icon = "settings" })
 }
 
